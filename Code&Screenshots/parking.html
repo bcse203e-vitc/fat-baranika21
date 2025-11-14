@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Parking Charge Calculator</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <style>
+        body { font-family: Arial; margin: 25px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #888; padding: 8px; }
+        th { background: #eee; }
+        #summary { margin-top: 20px; font-size: 18px; }
+        #downloadBtn { margin-top: 20px; padding: 10px 20px; }
+    </style>
+</head>
+
+<body>
+
+<h2>Parking Charge Calculator</h2>
+
+<input type="file" id="csvFile" accept=".csv">
+<button id="processBtn">Process</button>
+
+<div id="summary"></div>
+<div id="output"></div>
+
+<button id="downloadBtn" style="display:none;">Download charges_report.csv</button>
+
+<script>
+
+
+function readCSV(file, callback) {
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        callback(e.target.result);
+    }
+    reader.readAsText(file);
+}
+
+
+function calculate_charges(hours) {
+    if (hours <= 0) return { fee: 0, error: true };
+
+    let fullDays = Math.floor(hours / 24);
+    let remHours = hours % 24;
+
+    let total = fullDays * 10; 
+
+    if (remHours > 0) {
+        let blockFee = 2;       
+        if (remHours > 3) {
+            blockFee += (remHours - 3) * 0.50;
+        }
+        if (blockFee > 10) blockFee = 10;
+        total += blockFee;
+    }
+
+    return { fee: total, error: false };
+}
+
+
+$("#processBtn").click(function() {
+    let file = $("#csvFile")[0].files[0];
+    if (!file) {
+        alert("Please select yesterday.csv first.");
+        return;
+    }
+
+    readCSV(file, function(text) {
+
+        let lines = text.trim().split("\n");
+        let report = ["customer_id,duration_hours,charge,error_flag"];
+
+        let totalReceipts = 0;
+        let dailyMaxCount = 0;
+        let longestDuration = 0;
+        let longestCustomers = [];
+
+        for (let i = 1; i < lines.length; i++) {
+
+            let row = lines[i].split(",");
+            let customer_id = row[0].trim();
+            let entryTS = row[1].trim();
+            let exitTS = row[2].trim();
+
+            let entry = new Date(entryTS);
+            let exit = new Date(exitTS);
+
+            let error = false;
+            let durationHours = 0;
+            let charge = 0;
+
+            
+            if (isNaN(entry.getTime()) || isNaN(exit.getTime()) || exit <= entry) {
+                error = true;
+            } else {
+                let diffHours = (exit - entry) / (1000 * 60 * 60);
+                durationHours = Math.ceil(diffHours);
+
+                if (durationHours <= 0 || durationHours > 72) {
+                    error = true;
+                }
+            }
+
+            
+            if (!error) {
+                let result = calculate_charges(durationHours);
+                charge = result.fee;
+                error = result.error;
+            }
+
+            
+            if (!error) {
+                totalReceipts += charge;
+                if (charge >= 10 && charge % 10 === 0) dailyMaxCount++;
+
+                if (durationHours > longestDuration) {
+                    longestDuration = durationHours;
+                    longestCustomers = [customer_id];
+                } else if (durationHours === longestDuration) {
+                    longestCustomers.push(customer_id);
+                }
+            }
+
+            report.push(`${customer_id},${durationHours},${charge.toFixed(2)},${error}`);
+        }
+
+        
+        $("#summary").html(`
+            <h3>Summary Statistics</h3>
+            <p><b>Total receipts:</b> $${totalReceipts.toFixed(2)}</p>
+            <p><b>Customers charged daily max:</b> ${dailyMaxCount}</p>
+            <p><b>Average charge:</b> $${(totalReceipts / (report.length - 1)).toFixed(2)}</p>
+            <p><b>Longest stay (${longestDuration} hours):</b> ${longestCustomers.join(", ")}</p>
+        `);
+
+      
+        let html = "<table><tr><th>Customer ID</th><th>Duration (hours)</th><th>Charge</th><th>Error</th></tr>";
+
+        for (let j = 1; j < report.length; j++) {
+            let r = report[j].split(",");
+            html += `<tr>
+                <td>${r[0]}</td>
+                <td>${r[1]}</td>
+                <td>${r[2]}</td>
+                <td>${r[3]}</td>
+            </tr>`;
+        }
+        html += "</table>";
+
+        $("#output").html(html);
+
+        
+        $("#downloadBtn").show().off("click").click(function() {
+            let blob = new Blob([report.join("\n")], { type: "text/csv" });
+            let url = URL.createObjectURL(blob);
+
+            let a = document.createElement("a");
+            a.href = url;
+            a.download = "charges_report.csv";
+            a.click();
+        });
+
+    });
+
+});
+</script>
+
+</body>
+</html>
