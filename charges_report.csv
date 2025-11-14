@@ -1,6 +1,0 @@
-customer_id,duration_hours,charge,error_flag
-C001,3,2.00,false
-C002,7,4.00,false
-C003,26,12.00,false
-C004,72,30.00,false
-C005,0,0.00,true
